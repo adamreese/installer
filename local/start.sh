@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Setting HIPPO=0 will prevent the hippo job from starting
+: "${HIPPO:=true}"
+
 require() {
   if ! hash "$1" &>/dev/null; then
     echo "'$1' not found in PATH"
@@ -86,27 +89,28 @@ case "${OSTYPE}" in
     ;;
 esac
 
-echo "Starting hippo job..."
+if ((HIPPO)); then
+  echo "Starting hippo job..."
+  case "${OSTYPE}" in
+    darwin*)
+      nomad run -var="os=osx" job/hippo.nomad
+      ;;
+    linux*)
+      nomad run -var="os=linux" job/hippo.nomad
+      ;;
+    *)
+      echo "Hippo is only started on MacOS and Linux"
+      ;;
+  esac
 
-case "${OSTYPE}" in
-  darwin*)
-    nomad run -var="os=osx" job/hippo.nomad
-    ;;
-  linux*)
-    nomad run -var="os=linux" job/hippo.nomad
-    ;;
-  *)
-    echo "Hippo is only started on MacOS and Linux"
-    ;;
-esac
-
-# Required until hippo's healthz endpoint returns 404 when not ready.
-# Ref: https://github.com/fermyon/installer/pull/50
-echo 'Waiting for application to be accessible'
-HIPPO_URL="http://hippo.local.fermyon.link"
-while ! curl -s "${HIPPO_URL}/healthz"| grep -q "Healthy";  do
-  sleep 1
-done
+  # Required until hippo's healthz endpoint returns 404 when not ready.
+  # Ref: https://github.com/fermyon/installer/pull/50
+  echo 'Waiting for Hippo to be healthy'
+  HIPPO_URL="http://hippo.local.fermyon.link"
+  while ! curl -s "${HIPPO_URL}/healthz"| grep -q "Healthy";  do
+    sleep 1
+  done
+fi
 
 echo
 echo "Dashboards"
@@ -114,7 +118,9 @@ echo "----------"
 echo "Consul:  http://localhost:8500"
 echo "Nomad:   http://localhost:4646"
 echo "Traefik: http://localhost:8081"
-echo "Hippo:   http://hippo.local.fermyon.link"
+if ((HIPPO)); then
+  echo "Hippo:   http://hippo.local.fermyon.link"
+fi
 echo
 echo "Logs are stored in ./log"
 echo
@@ -123,7 +129,9 @@ echo
 echo "    export CONSUL_HTTP_ADDR=http://localhost:8500"
 echo "    export NOMAD_ADDR=http://localhost:4646"
 echo "    export BINDLE_URL=http://bindle.local.fermyon.link/v1"
-echo "    export HIPPO_URL=http://hippo.local.fermyon.link"
+if ((HIPPO)); then
+  echo "    export HIPPO_URL=http://hippo.local.fermyon.link"
+fi
 echo
 echo "Ctrl+C to exit."
 echo
